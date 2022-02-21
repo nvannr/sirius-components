@@ -10,6 +10,8 @@
  * Contributors:
  *     Obeo - initial API and implementation
  *******************************************************************************/
+export type CursorValue = 'pointer' | 'copy' | 'not-allowed';
+
 export interface GQLDiagramEventSubscription {
   diagramEvent: GQLDiagramEventPayload;
 }
@@ -150,7 +152,6 @@ export interface GQLRatio {
 }
 
 export interface GQLPosition {
-  __typename: string;
   x: number;
   y: number;
 }
