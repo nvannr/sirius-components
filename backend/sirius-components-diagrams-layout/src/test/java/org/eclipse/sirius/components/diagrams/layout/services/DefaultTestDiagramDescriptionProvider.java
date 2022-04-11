@@ -14,9 +14,12 @@ package org.eclipse.sirius.components.diagrams.layout.services;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -31,6 +34,7 @@ import org.eclipse.sirius.components.diagrams.ImageNodeStyle;
 import org.eclipse.sirius.components.diagrams.LineStyle;
 import org.eclipse.sirius.components.diagrams.ListItemNodeStyle;
 import org.eclipse.sirius.components.diagrams.ListNodeStyle;
+import org.eclipse.sirius.components.diagrams.Node;
 import org.eclipse.sirius.components.diagrams.NodeType;
 import org.eclipse.sirius.components.diagrams.RectangularNodeStyle;
 import org.eclipse.sirius.components.diagrams.Size;
@@ -180,7 +184,27 @@ public class DefaultTestDiagramDescriptionProvider {
         this.objectService = Objects.requireNonNull(objectService);
     }
 
+    private void populateTargetObjectIdToNodeId(List<Node> nodes, Map<String, String> targetObjectIdToNodeId) {
+        Optional<Node> optionalNode = Optional.empty();
+        List<Node> deeperNode = new ArrayList<>();
+
+        Iterator<Node> nodeIt = nodes.iterator();
+        while (optionalNode.isEmpty() && nodeIt.hasNext()) {
+            Node node = nodeIt.next();
+            targetObjectIdToNodeId.put(node.getTargetObjectId(), node.getId());
+            deeperNode.addAll(node.getChildNodes());
+            deeperNode.addAll(node.getBorderNodes());
+        }
+
+        if (!deeperNode.isEmpty()) {
+            this.populateTargetObjectIdToNodeId(deeperNode, targetObjectIdToNodeId);
+        }
+    }
+
     private Function<VariableManager, List<org.eclipse.sirius.components.representations.Element>> getEdgeTargetProvider(Diagram diagram) {
+        Map<String, String> targetObjectIdToNodeId = new HashMap<>();
+        this.populateTargetObjectIdToNodeId(diagram.getNodes(), targetObjectIdToNodeId);
+
         return variableManager -> {
             var optionalCache = variableManager.get(DiagramDescription.CACHE, DiagramRenderingCache.class);
             if (optionalCache.isEmpty()) {
@@ -191,6 +215,7 @@ public class DefaultTestDiagramDescriptionProvider {
             // @formatter:off
             String sourceId = variableManager.get(VariableManager.SELF, Element.class)
                     .map(this.objectService::getId)
+                    .map(id -> targetObjectIdToNodeId.computeIfAbsent(id, k -> UUID.randomUUID().toString()))
                     .orElse(""); //$NON-NLS-1$
             // @formatter:on
 
@@ -198,7 +223,10 @@ public class DefaultTestDiagramDescriptionProvider {
             Map<String, Element> idToElement = cache.getObjectToNodes().keySet().stream()
                     .filter(Element.class::isInstance)
                     .map(Element.class::cast)
-                    .collect(Collectors.toMap(this.objectService::getId, elem -> elem));
+                    .collect(Collectors.toMap(elem -> {
+                        String id = this.objectService.getId(elem);
+                        return targetObjectIdToNodeId.computeIfAbsent(id, k -> UUID.randomUUID().toString());
+                    }, elem -> elem));
             // @formatter:on
 
             // @formatter:off
