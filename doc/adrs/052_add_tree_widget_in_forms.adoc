@@ -1,0 +1,92 @@
+= ADR-052 - Add support for a tree widget in forms
+
+== Context
+
+The forms DSL currently supports a variety of widgets, but none which can represent hierarchical content.
+
+== Decision
+
+We will add support for a new `Tree` widget 
+This first version will only support displaying elements, with no edition capabilities.
+
+=== GraphQL Schema
+
+The `forms.graphqs` part of our schema will be extended with the following types:
+
+```
+type TreeWidget implements Widget {
+  id: ID!
+  diagnostics: [Diagnostic!]!
+  label: String!
+  children: [TreeNode!]!
+  expanded: [ID!]!
+}
+
+type TreeNode {
+  id: ID!
+  label: String!
+  kind: String!
+  imageURL: String!
+  selectable: boolean!
+  children: [TreeNode!]!
+}
+```
+
+The widget will be named `TreeWidget` instead of the more natural `Tree` as we already have a type with that name for the tree representations.
+We can not easily reuse the same type as the existing `Tree` is a `Representation` (with metadata, etc.) and not a `Widget`.
+
+Similarly, we will not reuse the existing `TreeItem` used for the `Tree` representation as it includes attributes like `editable` and `deletable` which do  not make sense in the context of a read-only widget.
+
+The `selectable` flag on `TreeNode` will be used to allow the creation of "folder" nodes inside the tree, which only exist for the purpose of organizing nodes in categories.
+A selectable node (e.g. one which represents a semantic element or representation) will change the workbench's selection when clicked on (using its `id`, `label` and `kind` attributes as `SelectionEntry`).
+Clicking on a non-selectable node will have no effect on the selection; in the UI the only effect will be to hightlight it.
+
+The existing `Tree` *representation* is designed to be used directly through a subscription and manages its "expanded" state accordingly, with each change in the expansion depth creating a new representation and a new subscription.
+The new `TreeWidget` will be embedded in an enclosing `Form` representation.
+We do not want to invalidate and recompute the whole form when the user expands or collapses tree nodes.
+The `TreeWidget` will thus send its full content to the frontend, with the ids of the elements to expand for the initial presentation (the `expanded` attribute above).
+Subsequent changes in the collapse/expand state of the nodes will be done purely on the client.
+If the underlying model changes, the frontend will receive a new state for the whole enclosing form, including the tree widget(s) anyway.
+
+=== Backend
+
+The backend API to describe a tree widget will follow the same pattern as the existing `ListDescription`, except that items can be recursive.
+For that part, we will use the same approach as for the tree _representation_: `childrenProvider` and `hasChildrenProvider`.
+
+```java
+package org.eclipse.sirius.components.forms.description;
+
+@Immutable
+public final class TreeDescription extends AbstractWidgetDescription {
+    private Function<VariableManager, String> idProvider;
+
+    private Function<VariableManager, String> labelProvider;
+
+    private Function<VariableManager, List<?>> childrenProvider;
+
+    private Function<VariableManager, Boolean> hasChildrenProvider;
+
+    private Function<VariableManager, String> itemIdProvider;
+
+    private Function<VariableManager, String> itemLabelProvider;
+
+    private Function<VariableManager, String> itemKindProvider;
+
+    private Function<VariableManager, String> itemImageURLProvider;
+
+    private Function<VariableManager, Boolean> itemSelectableProvider;
+
+    // with the corresponding getters and builder
+}
+```
+
+=== Frontend
+
+On the frontend, we will use Material UI's [`TreeView`](https://v4.mui.com/components/tree-view/) component.
+It is part of Materal UI's lab in the version we use (v4), but is still available (also in the lab) in v5 when we migrate to that.
+
+TODO: who controls the size/scrolling/layout of the widget, and how?
+
+== Status
+
+WIP
